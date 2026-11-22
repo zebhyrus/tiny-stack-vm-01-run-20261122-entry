@@ -2,6 +2,12 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 const I = process.env.MAKEFUN_INPUT_DIR ?? '/input';
 const O = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+// Operand-length lookup: one table read per step replaces the if/else
+// range chain in the dispatch loop. 255 = invalid opcode (trap 5).
+const OLEN = new Uint8Array(256).fill(255);
+for (const o of [0, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 32, 33, 34, 52, 64, 65, 80, 81, 82, 83]) OLEN[o] = 0;
+OLEN[1] = 1; OLEN[2] = 4;
+for (let o = 48; o <= 51; o++) OLEN[o] = 2;
 function run(p, inp) {
   const s = new Int32Array(256), c = new Int32Array(64), m = new Int32Array(256);
   const out = [];
@@ -10,12 +16,8 @@ function run(p, inp) {
     if (steps >= 1000000) return { out, code: 10 };
     if (pc < 0 || pc >= p.length) return { out, code: 9 };
     const op = p[pc];
-    let n = 0;
-    if (op === 1) n = 1;
-    else if (op === 2) n = 4;
-    else if (op >= 48 && op <= 51) n = 2;
-    else if (op === 0 || (op >= 3 && op <= 7) || (op >= 16 && op <= 30) || (op >= 32 && op <= 34) || op === 52 || (op >= 64 && op <= 65) || (op >= 80 && op <= 83)) n = 0;
-    else return { out, code: 5 };
+    const n = OLEN[op];
+    if (n === 255) return { out, code: 5 };
     if (pc + 1 + n > p.length) return { out, code: 9 };
     steps++;
     const next = pc + 1 + n;
